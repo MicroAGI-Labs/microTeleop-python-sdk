@@ -1,4 +1,4 @@
-# Tactile Teleop SDK - Python
+# microTeleop SDK - Python
 
 ## Overview
 
