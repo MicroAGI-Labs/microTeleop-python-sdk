@@ -1223,7 +1223,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tactile-teleop-python-sdk"
+name = "microteleop-python-sdk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tactile-teleop-python-sdk"
+name = "microteleop-python-sdk"
 version = "0.1.0"
-description = "Add your description here"
+description = "Python SDK for microTeleop VR robot teleoperation and camera streaming"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

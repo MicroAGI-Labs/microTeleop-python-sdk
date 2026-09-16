@@ -4,17 +4,17 @@ import logging
 import numpy as np
 import requests
 
-from tactile_teleop_sdk.camera.camera_streamer import CameraStreamer
-from tactile_teleop_sdk.config import TactileTeleopConfig
-from tactile_teleop_sdk.inputs.base import ArmGoal
-from tactile_teleop_sdk.inputs.vr_controller import VRController
+from microteleop_sdk.camera.camera_streamer import CameraStreamer
+from microteleop_sdk.config import DEFAULT_BACKEND_URL, MicroTeleopConfig
+from microteleop_sdk.inputs.base import ArmGoal
+from microteleop_sdk.inputs.vr_controller import VRController
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s.%(funcName)s: %(message)s")
 
 
-class TactileAPI:
-    def __init__(self, api_key: str):
-        self.config = TactileTeleopConfig()
+class MicroTeleopAPI:
+    def __init__(self, api_key: str, *, backend_url: str = DEFAULT_BACKEND_URL):
+        self.config = MicroTeleopConfig(backend_url=backend_url.rstrip("/"))
         self.api_key = api_key
         self.backend_url = self.config.backend_url
 

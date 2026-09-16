@@ -1,18 +1,21 @@
 import asyncio
+import os
 
 import numpy as np
 
-from tactile_teleop_sdk import TactileAPI
-from tactile_teleop_sdk.utils.visualizer import TransformVisualizer
+from microteleop_sdk import MicroTeleopAPI
+from microteleop_sdk.config import DEFAULT_BACKEND_URL
+from microteleop_sdk.utils.visualizer import TransformVisualizer
 
 CAMERA_WIDTH = 580
 CAMERA_HEIGHT = 480
-API_KEY = ""  # NOTE: Replace with your robot API key from https://teleop.tactilerobotics.ai
+API_KEY = os.environ["MICROTELEOP_API_KEY"]
+BACKEND_URL = os.environ.get("MICROTELEOP_BACKEND_URL", DEFAULT_BACKEND_URL)
 
 
 async def main():
     # Initialize the API
-    api = TactileAPI(api_key=API_KEY)
+    api = MicroTeleopAPI(api_key=API_KEY, backend_url=BACKEND_URL)
 
     # Initialize visualizer (will open browser automatically)
     visualizer = TransformVisualizer()

@@ -2,14 +2,14 @@
 
 ## Overview
 
-The Tactile Teleop SDK allows for real-time robot teleoperation right from the web-browser of your VR Headset.
+The microTeleop SDK allows for real-time robot teleoperation right from the web-browser of your VR Headset.
 
 
 ### Core functionalities
 - (egocentric) stereo and mono camera streaming
 - operator controls for recording data
 - direct integration with LeRobot for data recording 
-- **Easy Setup**: Connect your robot in minutes - just generate an API key at [teleop.tactilerobotics.ai](https://teleop.tactilerobotics.ai), plug it into the Python SDK, and access your robot directly from the VR headset’s native browser.
+- **Easy Setup**: Connect your robot in minutes - configure an API key on a compatible microTeleop backend (see Backend compatibility below), plug it into the Python SDK, and access your robot directly from the VR headset’s native browser.
 
 
 ## Supported data streams:
@@ -32,29 +32,36 @@ The Tactile Teleop SDK allows for real-time robot teleoperation right from the w
 ### Conda Installation
 
 ```bash
-git clone git@github.com:TactileRoboticsAI/tactile-teleop-python-sdk.git
-cd tactile-teleop-python-sdk
-conda create -n tactile python=3.10
-conda activate tactile
+git clone git@github.com:MicroAGI-Labs/microTeleop-python-sdk.git
+cd microTeleop-python-sdk
+conda create -n microteleop python=3.10
+conda activate microteleop
 pip install -e .
 ```
 
 ### UV Installation
 
 ```bash
-git clone git@github.com:TactileRoboticsAI/tactile-teleop-python-sdk.git
-cd tactile-teleop-python-sdk
+git clone git@github.com:MicroAGI-Labs/microTeleop-python-sdk.git
+cd microTeleop-python-sdk
 uv sync
 ```
 
-### Create API key
+### Configure the backend
 
-Visit [teleop.tactilerobotics.ai](https://teleop.tactilerobotics.ai), register and create a new robot. Save the automatically generated API key.
+The SDK defaults to Atlas Core at [https://atlas-core-api-f2qyzkorqq-oa.a.run.app](https://atlas-core-api-f2qyzkorqq-oa.a.run.app). Set your robot API key for the examples:
 
-### Key Concept
-The robot API key authorizes you (anyone) to control your robot, once it is ready to be operated. 
-The robot API key gets generated from the webserver (supabase backend) and it associated to a specific user.
-A user can only operate a robot that has the same robot API key as associated to its account. 
+```bash
+export MICROTELEOP_API_KEY="your-robot-api-key"
+```
+
+To override the default, pass `backend_url` when constructing `MicroTeleopAPI`, or set `MICROTELEOP_BACKEND_URL` for the examples.
+
+When upgrading an existing integration, reinstall the package and update imports to `microteleop_sdk` and the API class to `MicroTeleopAPI`.
+
+### Backend compatibility
+
+This SDK still uses API-key authentication through `POST /api/sdk/auth`. Current Atlas Core explicitly does not expose that route: its [robot SDK contract](https://github.com/MicroAGI-Labs/atlas-core/blob/main/specs/teleop/SDK_PROTOCOL.md) requires signed challenge/proof authentication and control permits. The branding and default URL update does not implement that protocol migration. The example below requires a backend that supports the existing SDK protocol.
 
 ### Minimal Example
 
@@ -64,17 +71,19 @@ import os
 
 import numpy as np
 
-from tactile_teleop_sdk import TactileAPI
-from tactile_teleop_sdk.utils.visualizer import TransformVisualizer
+from microteleop_sdk import MicroTeleopAPI
+from microteleop_sdk.config import DEFAULT_BACKEND_URL
+from microteleop_sdk.utils.visualizer import TransformVisualizer
 
 CAMERA_WIDTH = 580
 CAMERA_HEIGHT = 480
-API_KEY = ""  # NOTE: Replace with your robot API key from https://teleop.tactilerobotics.ai
+API_KEY = os.environ["MICROTELEOP_API_KEY"]
+BACKEND_URL = os.environ.get("MICROTELEOP_BACKEND_URL", DEFAULT_BACKEND_URL)
 
 
 async def main():
     # Initialize the API
-    api = TactileAPI(api_key=API_KEY)
+    api = MicroTeleopAPI(api_key=API_KEY, backend_url=BACKEND_URL)
 
     # Initialize visualizer (will open browser automatically)
     visualizer = TransformVisualizer()
@@ -114,7 +123,7 @@ if __name__ == "__main__":
 ```
 ### On the VR Headset
 
-Go to the Browser of your VR headset and visit [teleop.tactilerobotics.ai](https://teleop.tactilerobotics.ai). Login, and press start VR Control on the robot.
+Atlas Core hosts the Quest interface at `/quest`. The example requires a compatible SDK backend as described above; setting the Atlas URL alone does not enable robot control.
 
 #### Controller Mapping
 

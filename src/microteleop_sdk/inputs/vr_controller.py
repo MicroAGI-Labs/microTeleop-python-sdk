@@ -7,8 +7,8 @@ from typing import Dict
 import numpy as np
 from livekit import rtc
 
-from tactile_teleop_sdk.inputs.base import BaseInputProvider, EventType, VRControllerGoal
-from tactile_teleop_sdk.utils.geometry import pose2transform
+from microteleop_sdk.inputs.base import BaseInputProvider, EventType, VRControllerGoal
+from microteleop_sdk.utils.geometry import pose2transform
 
 logger = logging.getLogger(__name__)
 
