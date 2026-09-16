@@ -12,6 +12,10 @@ The microTeleop SDK allows for real-time robot teleoperation right from the web-
 - **Easy Setup**: Connect your robot in minutes - configure an API key on a compatible microTeleop backend (see Backend compatibility below), plug it into the Python SDK, and access your robot directly from the VR headset’s native browser.
 
 
+## Design philosophy
+
+The SDK should be as minimal as possible: a small public API, few dependencies, and straightforward code. Add features and abstractions only when a concrete use case requires them. Keep backend and application logic outside the SDK.
+
 ## Supported data streams:
 - **VR Controller Input**: End-effector pose, button signals from the controlle, trigger, grip
 
