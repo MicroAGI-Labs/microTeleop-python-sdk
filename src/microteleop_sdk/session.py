@@ -38,6 +38,8 @@ class RobotSession:
         self._tasks = []
         self._video = None
         self._last_capture_ns = -1
+        self._capture_origin_ns = time.time_ns() - time.monotonic_ns()
+        self._frame_id = 0
         self._stopping = False
 
         def stop():
@@ -98,6 +100,9 @@ class RobotSession:
         room.on("disconnected", lambda *_: self.client.guard.stop())
         try:
             await room.connect(result["protocol_server_url"], result["token"])
+            room.local_participant.register_rpc_method(
+                "microteleop.capture-clock.v1", lambda _: json.dumps(self.capture_clock())
+            )
             self._tasks = [asyncio.create_task(self._poll()), asyncio.create_task(self._watchdog())]
         except BaseException:
             await self.close()
@@ -121,8 +126,16 @@ class RobotSession:
             self.client.tick()
             await asyncio.sleep(min(0.025, self.client.guard.command_timeout / 4))
 
-    async def publish_rgb(self, rgb, *, captured_at_ns, name="g1d-ego-mono"):
-        """Publish a true mono RGB view. Rendering/encoding is outside the control loop."""
+    def capture_clock(self):
+        """Return the stable source clock used by per-frame metadata."""
+        return {
+            "clock_id": "sdk-capture-clock-v1",
+            "boot_id": self.client.instance,
+            "ticks_us": (self._capture_origin_ns + time.monotonic_ns()) // 1000,
+        }
+
+    async def publish_rgb(self, rgb, *, captured_at_ns, name="front"):
+        """Publish RGB with source capture time and frame ID bound to the encoded frame."""
         import numpy as np
         from livekit import rtc
 
@@ -140,18 +153,32 @@ class RobotSession:
         if self._video is None:
             source = rtc.VideoSource(width, height)
             track = rtc.LocalVideoTrack.create_video_track(name, source)
-            await self.room.local_participant.publish_track(track, rtc.TrackPublishOptions())
+            await self.room.local_participant.publish_track(
+                track,
+                rtc.TrackPublishOptions(
+                    source=rtc.TrackSource.SOURCE_CAMERA,
+                    frame_metadata_features=[
+                        rtc.FrameMetadataFeature.FMF_USER_TIMESTAMP,
+                        rtc.FrameMetadataFeature.FMF_FRAME_ID,
+                    ],
+                ),
+            )
             self._video = source, width, height, name
         source, expected_width, expected_height, expected_name = self._video
         if (width, height, name) != (expected_width, expected_height, expected_name):
             raise ValueError("camera geometry/name changed during session")
         if not 0 <= time.monotonic_ns() - captured_at_ns < 100_000_000:
             raise ValueError("camera capture expired during track publication")
+        self._frame_id += 1
         source.capture_frame(
             rtc.VideoFrame(
                 width, height, rtc.VideoBufferType.RGB24, np.ascontiguousarray(rgb).tobytes()
             ),
             timestamp_us=captured_at_ns // 1000,
+            metadata=rtc.FrameMetadata(
+                user_timestamp=(self._capture_origin_ns + captured_at_ns) // 1000,
+                frame_id=self._frame_id,
+            ),
         )
         self._last_capture_ns = captured_at_ns
 

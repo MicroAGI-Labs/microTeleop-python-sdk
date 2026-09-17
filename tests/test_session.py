@@ -187,8 +187,8 @@ def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch)
         def __init__(self, *_):
             pass
 
-        def capture_frame(self, frame, *, timestamp_us):
-            captured.append(timestamp_us)
+        def capture_frame(self, frame, *, timestamp_us, metadata):
+            captured.append((timestamp_us, metadata))
 
     async def publish(*_):
         pass
@@ -201,7 +201,12 @@ def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch)
     stamp = time.monotonic_ns() - 10_000_000
     rgb = np.zeros((8, 8, 3), np.uint8)
     asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
-    assert captured == [stamp // 1000]
+    assert captured[0][0] == stamp // 1000
+    assert captured[0][1].frame_id == 1
+    assert captured[0][1].user_timestamp == (sdk._capture_origin_ns + stamp) // 1000
+    clock = sdk.capture_clock()
+    assert clock["boot_id"] == sdk.client.instance
+    assert 0 < clock["ticks_us"] - captured[0][1].user_timestamp < 100_000
     import pytest
 
     with pytest.raises(ValueError, match="capture"):
