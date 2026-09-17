@@ -1,7 +1,7 @@
-"""Signed v1 robot session for development integrations.
+"""Signed Atlas robot session.
 
 The SDK owns transport/authority; callers own robot control and safe-state behavior.
-The v2 release, recording and video-health contracts have separate qualification gates.
+Recording and live-device qualification are separate from command admission.
 """
 
 import asyncio
@@ -55,6 +55,8 @@ class RobotSession:
             control, command = payload["control"], payload["command"]
             if not isinstance(command, dict):
                 return False
+            if not self.client.tick():
+                return False
             self.client.guard.authorize(
                 packet.participant.identity,
                 control["session_id"],
@@ -77,7 +79,8 @@ class RobotSession:
         return (
             sample is not None
             and sample is self.latest
-            and guard.tick()
+            and self.client.tick()
+            and guard.permit is not None
             and guard.permit.ownership_version == sample.ownership_version
             and time.monotonic() - sample.received_at < guard.command_timeout
         )
@@ -111,11 +114,11 @@ class RobotSession:
             except Exception:  # noqa: BLE001 -- any poll failure must inhibit control
                 self.client.guard.stop()
                 log.warning("Control authority unavailable; control inhibited")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.02)
 
     async def _watchdog(self):
         while not self._stopping:
-            self.client.guard.tick()
+            self.client.tick()
             await asyncio.sleep(min(0.025, self.client.guard.command_timeout / 4))
 
     async def publish_rgb(self, rgb, *, captured_at_ns, name="g1d-ego-mono"):

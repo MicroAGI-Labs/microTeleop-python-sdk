@@ -19,5 +19,16 @@
       "source": "atlas_core/teleop/models/control.py",
       "sha256": "ceacdffafbc18cf70e2b318fcfb302dc9583a94771098eac18bfe89766ff9941"
     }
-  ]
+  ],
+  "release": "0.3.0",
+  "current_contract": {
+    "repository": "MicroAGI-Labs/atlas-core",
+    "revision": "69cf935",
+    "files": [
+      "atlas_core/teleop/security/contracts.py",
+      "atlas_core/teleop/security/authority.py",
+      "atlas_core/teleop/models/release.py"
+    ],
+    "scope": "protocol-2 compatibility admission; signed schema-1 permits; authenticated required-view health"
+  }
 }

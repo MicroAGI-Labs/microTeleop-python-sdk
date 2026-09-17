@@ -49,11 +49,11 @@ def test_signature_tamper_unknown_key_and_wrong_purpose(keys):
         trust.verify(signed, "robot-challenge")
     with pytest.raises(AuthenticationError):
         TrustStore({}).verify(signed, "control-permit")
-    import jwt
-
     payload = json.dumps(permit(robot_id="other").model_dump(mode="json")).encode()
     parts = signed.split(".")
-    parts[1] = jwt.utils.base64url_encode(payload).decode()
+    from jwt.utils import base64url_encode
+
+    parts[1] = base64url_encode(payload).decode()
     with pytest.raises(AuthenticationError):
         trust.verify(".".join(parts), "control-permit")
 

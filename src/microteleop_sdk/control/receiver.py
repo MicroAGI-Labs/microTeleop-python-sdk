@@ -98,7 +98,7 @@ class ControlReceiver:
             ):
                 if getattr(p, field) != getattr(self.permit, field):
                     raise AuthenticationError("Safe-state acknowledgement required before handover")
-            if p.issued_at < self.last_issued_at:
+            if self.last_issued_at is None or p.issued_at < self.last_issued_at:
                 raise AuthenticationError("Stale renewal")
         else:
             self.last_sequence = -1
@@ -141,6 +141,8 @@ class ControlReceiver:
         if not self.tick():
             raise AuthenticationError("No current authority")
         p = self.permit
+        if p is None:
+            raise AuthenticationError("No current authority")
         if (
             sender != p.participant_identity
             or session_id != p.session_id
