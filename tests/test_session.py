@@ -3,8 +3,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from microteleop_sdk import RobotSession
 from microteleop_sdk.control.crypto import SigningKey
-from microteleop_sdk.session import RobotSession
 
 HELLO = {
     "protocol_version": 2,

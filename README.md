@@ -1,6 +1,8 @@
 # microTeleop Python SDK 0.3.0
 
 `RobotSession` is the supported robot API. Install this release independently of Atlas Core.
+Import it with `from microteleop_sdk import RobotSession`. The removed
+`MicroTeleopAPI` and API-key authentication surface have no compatibility alias.
 Atlas owns identity, operator admission and permits; the SDK owns signed challenge/proof,
 LiveKit transport, the bounded latest-command mailbox, watchdog and source camera timestamps.
 The robot controller owns measured safe state and checks `session.current(sample)` again
