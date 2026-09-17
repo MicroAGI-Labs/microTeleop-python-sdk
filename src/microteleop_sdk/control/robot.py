@@ -101,11 +101,19 @@ class RobotControlClient:
 
     def process_state(self, result):
         """Process authority updates on the robot control thread."""
+        paused = result["control_paused"]
+        if type(paused) is not bool:
+            self.guard.stop()
+            raise AuthenticationError("Invalid platform pause state")
+        if paused:
+            self.guard.pause()
         if result["stop"]:
             self.guard.stop(result["ownership_version"])
         elif result.get("permit") and result["ownership_version"] > self.guard.fenced_version:
             # Preserve local stop fencing while the platform catches up.
             self.guard.accept_permit(result["permit"])
+            if not paused and self.guard.paused and self.is_safe() is True:
+                self.guard.resume()
         if self.guard.permit is None and (result["stop"] or not result["ready"]):
             self.guard.stop(result["ownership_version"])
             return self.is_safe() is True

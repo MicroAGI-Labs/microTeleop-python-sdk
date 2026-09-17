@@ -102,3 +102,111 @@ def test_stale_timestamp_cannot_refresh_latest_input(tmp_path):
     sdk, _, _ = session(tmp_path)
     assert not sdk.receive(packet(sent_at_ms=(time.time() - 2) * 1000))
     assert sdk.latest is None
+
+
+def test_platform_pause_clears_input_and_resume_preserves_ownership(tmp_path):
+    sdk, stops, token = session(tmp_path)
+    assert sdk.receive(packet())
+    state = {
+        "stop": False,
+        "ownership_version": 1,
+        "permit": token,
+        "ready": True,
+        "control_paused": True,
+    }
+    sdk.client.process_state(state)
+    assert sdk.latest is None and not sdk.receive(packet(2))
+    assert not sdk.client.guard.tick(monotonic_now=sdk.client.guard.command_deadline + 1)
+    assert sdk.client.guard.permit is not None
+    sdk.client.process_state(dict(state, control_paused=False))
+    assert sdk.receive(packet(3))
+    assert sdk.current(sdk.latest)
+    assert sdk.client.guard.fenced_version == 0 and len(stops) >= 2
+
+
+def test_platform_resume_waits_for_measured_hold(tmp_path):
+    sdk, _, token = session(tmp_path)
+    state = {
+        "stop": False,
+        "ownership_version": 1,
+        "permit": token,
+        "ready": True,
+        "control_paused": True,
+    }
+    sdk.client.process_state(state)
+    sdk.client.is_safe = lambda: False
+    sdk.client.process_state(dict(state, control_paused=False))
+    assert not sdk.receive(packet())
+    sdk.client.is_safe = lambda: True
+    sdk.client.process_state(dict(state, control_paused=False))
+    assert sdk.receive(packet(2))
+
+
+def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch):
+    import asyncio
+
+    import numpy as np
+    from livekit import rtc
+
+    sdk, _, _ = session(tmp_path)
+    captured = []
+
+    class Source:
+        def __init__(self, *_):
+            pass
+
+        def capture_frame(self, frame, *, timestamp_us):
+            captured.append(timestamp_us)
+
+    async def publish(*_):
+        pass
+
+    sdk.room = SimpleNamespace(local_participant=SimpleNamespace(publish_track=publish))
+    monkeypatch.setattr(rtc, "VideoSource", Source)
+    monkeypatch.setattr(rtc.LocalVideoTrack, "create_video_track", lambda *_: object())
+    stamp = time.monotonic_ns() - 10_000_000
+    rgb = np.zeros((8, 8, 3), np.uint8)
+    asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
+    assert captured == [stamp // 1000]
+    import pytest
+
+    with pytest.raises(ValueError, match="capture"):
+        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
+    with pytest.raises(ValueError, match="capture"):
+        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=time.monotonic_ns() - 200_000_000))
+    assert len(captured) == 1
+
+
+def test_resume_cannot_reuse_inflight_or_queued_pre_pause_input(tmp_path):
+    sdk, _, token = session(tmp_path)
+    assert sdk.receive(packet())
+    inflight = sdk.latest
+    queued = packet(2)
+    state = {
+        "stop": False,
+        "ownership_version": 1,
+        "permit": token,
+        "ready": True,
+        "control_paused": True,
+    }
+    sdk.client.process_state(state)
+    sdk.client.process_state(dict(state, control_paused=False))
+    assert not sdk.current(inflight)
+    assert not sdk.receive(queued)
+    assert sdk.receive(packet(3))
+
+
+def test_pause_still_expires_authority_and_preserves_stop_fence(tmp_path):
+    sdk, _, token = session(tmp_path)
+    state = {
+        "stop": False,
+        "ownership_version": 1,
+        "permit": token,
+        "ready": True,
+        "control_paused": True,
+    }
+    sdk.client.process_state(state)
+    sdk.client.guard.tick(monotonic_now=sdk.client.guard.deadline + 1)
+    assert sdk.client.guard.permit is None
+    sdk.client.process_state(dict(state, control_paused=False))
+    assert not sdk.receive(packet()) and sdk.client.guard.fenced_version == 1
