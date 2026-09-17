@@ -1,7 +1,7 @@
 """Signed v1 robot session for development integrations.
 
 The SDK owns transport/authority; callers own robot control and safe-state behavior.
-This does not implement the v2 release/recording/video-health contract.
+The v2 release, recording and video-health contracts have separate qualification gates.
 """
 
 import asyncio
@@ -27,7 +27,7 @@ class ReceivedCommand:
 class RobotSession:
     """A bounded latest-command mailbox behind signed permits and a watchdog.
 
-    ``safe_state`` must promptly inhibit the robot, without blocking network I/O.
+    ``safe_state`` must promptly inhibit the robot and keep the event loop responsive.
     ``is_safe`` confirms completion before acknowledging a new platform epoch.
     Use ``current(sample)`` again after slow work and before submitting output.
     """
@@ -46,7 +46,7 @@ class RobotSession:
         self.client = RobotControlClient(safe_state=stop, is_safe=is_safe, **identity)
 
     def receive(self, packet):
-        """Admit a LiveKit data packet; invalid senders never reach the mailbox."""
+        """Admit an authorized LiveKit data packet into the latest-command mailbox."""
         if packet.topic != "vr-controller-data" or len(packet.data) > 65536:
             return False
         try:

@@ -65,16 +65,16 @@ When upgrading an existing integration, reinstall the package and update imports
 
 ### Backend compatibility
 
-The legacy `MicroTeleopAPI` uses API-key authentication through `POST /api/sdk/auth`. Current Atlas Core explicitly does not expose that route: its [robot SDK contract](https://github.com/MicroAGI-Labs/atlas-core/blob/main/specs/teleop/SDK_PROTOCOL.md) requires signed challenge/proof authentication and control permits. The branding and default URL update does not implement that protocol migration. The example below requires a backend that supports the existing SDK protocol.
+The legacy `MicroTeleopAPI` requires a backend with API-key authentication through `POST /api/sdk/auth`. Atlas Core's [robot SDK contract](https://github.com/MicroAGI-Labs/atlas-core/blob/main/specs/teleop/SDK_PROTOCOL.md) uses signed challenge/proof authentication and control permits through `RobotSession`.
 
 ### Signed Atlas development session (0.2)
 
 `microteleop_sdk.session.RobotSession` implements Atlas signed v1 challenge/proof,
 issuer/key-pinned permits, participant identity checks, replay rejection and an
 independent command watchdog. It requires HTTPS, a registered robot signing key,
-a platform trust file, and an operator with control ownership. It has no robot
-control or simulator dependencies. This is **not** the v2 release, recording or
-required-view-health contract; do not mark an integration release-ready from it.
+a platform trust file, and an operator with control ownership. Robot control and
+simulation run in their own packages. Release qualification requires the v2
+release, recording and required-view-health acceptance gates.
 
 ```python
 from microteleop_sdk.session import RobotSession
@@ -99,7 +99,7 @@ finally:
 ```
 
 Run the control loop continuously in your application. `safe_state` must inhibit
-writes promptly without blocking the event loop; `is_safe` must report completed
+writes promptly while keeping the event loop responsive; `is_safe` must report completed
 safe-state behavior. The application must reject malformed robot input, use
 measured feedback, and fence pending output on simulator reset. `publish_rgb`
 accepts true mono RGB, with fixed dimensions/name for the session. Rendering
@@ -107,7 +107,7 @@ belongs in a separate application task. The legacy camera API is unchanged.
 
 The signed envelope is `{control: {session_id, ownership_version, sequence,
 sent_at_ms}, command: {...}}` on `vr-controller-data`. The SDK exposes a latest
-mailbox, never an unbounded motion queue. See `CONTROL_PROVENANCE.json` for the
+mailbox with one current sample. See `CONTROL_PROVENANCE.json` for the
 pinned source of the authority implementation.
 
 Validation: `uv sync --locked --group dev && uv run pytest -q`.
@@ -172,7 +172,7 @@ if __name__ == "__main__":
 ```
 ### On the VR Headset
 
-Atlas Core hosts the Quest interface at `/quest`. The example requires a compatible SDK backend as described above; setting the Atlas URL alone does not enable robot control.
+Atlas Core hosts the Quest interface at `/quest`. Use `RobotSession` for Atlas, with a registered robot identity and operator ownership. The legacy example requires its API-key backend.
 
 #### Controller Mapping
 
