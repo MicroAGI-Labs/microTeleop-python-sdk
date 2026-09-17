@@ -1,0 +1,23 @@
+{
+  "source_repository": "MicroAGI-Labs/atlas-core",
+  "source_revision": "570131a",
+  "adaptation": "Standalone namespace and imports; no runtime platform dependency",
+  "files": [
+    {
+      "source": "archive/shift-teleop/src/tactile_teleop/security/crypto.py",
+      "sha256": "abf51df829d1fad1b9556e067dea748149e9ca278d6f1039774f42e3e3c7c04a"
+    },
+    {
+      "source": "archive/shift-teleop/src/tactile_teleop/security/receiver.py",
+      "sha256": "3e26f051d3246ada96ad490251d09b73b91849b8df3bd04ed5ceb3c9e86f63b0"
+    },
+    {
+      "source": "archive/shift-teleop/src/tactile_teleop/security/robot.py",
+      "sha256": "33a91fe8d73b9445dddfebf6585dab78a1e6aa60428531440257219392c5707e"
+    },
+    {
+      "source": "atlas_core/teleop/models/control.py",
+      "sha256": "ceacdffafbc18cf70e2b318fcfb302dc9583a94771098eac18bfe89766ff9941"
+    }
+  ]
+}

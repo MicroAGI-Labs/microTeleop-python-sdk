@@ -79,6 +79,5 @@ cython_debug/
 # VSCode
 .vscode/ 
 
-tests/
 .cursor/
 .flake8
