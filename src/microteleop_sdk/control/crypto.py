@@ -57,7 +57,7 @@ class SigningKey:
 
     @classmethod
     def generate(cls, path: str):
-        """Explicit provisioning only; never silently replace an existing key."""
+        """Provision a new key at an available path."""
         key = Ed25519PrivateKey.generate()
         data = key.private_bytes(
             serialization.Encoding.PEM,

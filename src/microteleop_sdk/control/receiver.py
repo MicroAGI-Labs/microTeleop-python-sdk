@@ -65,7 +65,7 @@ class ControlReceiver:
         self._monotonic_anchor = time.monotonic()
 
     def _wall_time(self):
-        # A wall-clock rollback must not extend an already accepted grant.
+        # The monotonic anchor bounds permit lifetime across wall-clock rollbacks.
         return max(time.time(), self._wall_anchor + time.monotonic() - self._monotonic_anchor)
 
     def accept_permit(self, token):

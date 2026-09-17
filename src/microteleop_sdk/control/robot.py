@@ -100,11 +100,11 @@ class RobotControlClient:
         return self.exchange("connect", node_id)
 
     def process_state(self, result):
-        """Call on the robot control thread, never a networking worker."""
+        """Process authority updates on the robot control thread."""
         if result["stop"]:
             self.guard.stop(result["ownership_version"])
         elif result.get("permit") and result["ownership_version"] > self.guard.fenced_version:
-            # Never resurrect a locally stopped epoch while the platform catches up.
+            # Preserve local stop fencing while the platform catches up.
             self.guard.accept_permit(result["permit"])
         if self.guard.permit is None and (result["stop"] or not result["ready"]):
             self.guard.stop(result["ownership_version"])

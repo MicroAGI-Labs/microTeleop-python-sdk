@@ -1,7 +1,6 @@
-"""Control-permit payload shape, not signature or receiver verification.
+"""Control-permit payload shape.
 
-The SDK must verify the issuer, signature, recipient, ownership version and
-bounded validity before using a permit. A valid model grants no authority.
+Receivers verify signatures, context and bounded validity before authorizing control.
 """
 
 from datetime import datetime, timezone
