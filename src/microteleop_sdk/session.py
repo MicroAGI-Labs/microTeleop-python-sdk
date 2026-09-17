@@ -37,6 +37,7 @@ class RobotSession:
         self.room = None
         self._tasks = []
         self._video = None
+        self._last_capture_ns = -1
         self._stopping = False
 
         def stop():
@@ -75,6 +76,7 @@ class RobotSession:
         guard = self.client.guard
         return (
             sample is not None
+            and sample is self.latest
             and guard.tick()
             and guard.permit.ownership_version == sample.ownership_version
             and time.monotonic() - sample.received_at < guard.command_timeout
@@ -116,7 +118,7 @@ class RobotSession:
             self.client.guard.tick()
             await asyncio.sleep(min(0.025, self.client.guard.command_timeout / 4))
 
-    async def publish_rgb(self, rgb, *, name="g1d-ego-mono"):
+    async def publish_rgb(self, rgb, *, captured_at_ns, name="g1d-ego-mono"):
         """Publish a true mono RGB view. Rendering/encoding is outside the control loop."""
         import numpy as np
         from livekit import rtc
@@ -125,6 +127,12 @@ class RobotSession:
             raise RuntimeError("session is not connected")
         if rgb.dtype != np.uint8 or rgb.ndim != 3 or rgb.shape[2] != 3:
             raise ValueError("expected uint8 HxWx3 RGB")
+        if (
+            type(captured_at_ns) is not int
+            or captured_at_ns <= self._last_capture_ns
+            or not 0 <= time.monotonic_ns() - captured_at_ns < 100_000_000
+        ):
+            raise ValueError("stale, future or repeated camera capture")
         height, width = rgb.shape[:2]
         if self._video is None:
             source = rtc.VideoSource(width, height)
@@ -134,11 +142,15 @@ class RobotSession:
         source, expected_width, expected_height, expected_name = self._video
         if (width, height, name) != (expected_width, expected_height, expected_name):
             raise ValueError("camera geometry/name changed during session")
+        if not 0 <= time.monotonic_ns() - captured_at_ns < 100_000_000:
+            raise ValueError("camera capture expired during track publication")
         source.capture_frame(
             rtc.VideoFrame(
                 width, height, rtc.VideoBufferType.RGB24, np.ascontiguousarray(rgb).tobytes()
-            )
+            ),
+            timestamp_us=captured_at_ns // 1000,
         )
+        self._last_capture_ns = captured_at_ns
 
     async def close(self):
         self._stopping = True
@@ -151,3 +163,4 @@ class RobotSession:
             await self.room.disconnect()
             self.room = None
         self._video = None
+        self._last_capture_ns = -1

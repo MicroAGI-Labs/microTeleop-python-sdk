@@ -180,3 +180,15 @@ Atlas Core hosts the Quest interface at `/quest`. Use `RobotSession` for Atlas, 
 - **Trigger Button**: Controls gripper (pressed = open, released = closed)
 - **Reset Button (X/A)**: Trigger to reset arm to initial position
 - **Position Tracking**: Controller movement translates to arm movement when grip is held
+
+The G1D development session in version 0.2.1 honors the platform's
+`control_paused` state. Explicit resume waits for measured safe state; queued
+pre-resume commands are rejected and local authority-stop fences remain in force.
+`publish_rgb` requires the source host-monotonic `captured_at_ns`, retains that
+clock in LiveKit, and rejects repeated, future or 100 ms-old captures. Browser
+capture-to-display freshness still requires end-to-end qualification.
+
+This release remains a development session protocol. It does not advertise the
+Atlas v2 recording, upload or view-health capabilities and cannot pass that
+release's compatibility admission. Capture timestamps alone do not establish
+browser display freshness or recording retention.

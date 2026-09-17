@@ -56,6 +56,8 @@ class ControlReceiver:
         self.uncertainty = clock_uncertainty_seconds
         self.command_timeout = command_timeout_seconds
         self.permit = None
+        self.paused = False
+        self.resumed_at = 0.0
         self.fenced_version = 0
         self.deadline = 0.0
         self.command_deadline = 0.0
@@ -106,6 +108,17 @@ class ControlReceiver:
         self.deadline = time.monotonic() + remaining
         return p
 
+    def pause(self):
+        if not self.paused:
+            self.paused = True
+            self.safe_state()
+
+    def resume(self):
+        if self.paused:
+            self.resumed_at = self._wall_time()
+            self.command_deadline = time.monotonic() + self.command_timeout
+            self.paused = False
+
     def stop(self, fence_version=None):
         p = self.permit
         self.fenced_version = max(
@@ -118,11 +131,11 @@ class ControlReceiver:
         now = time.monotonic() if monotonic_now is None else monotonic_now
         if self.permit and (
             now >= self.deadline
-            or now >= self.command_deadline
+            or (not self.paused and now >= self.command_deadline)
             or self._wall_time() + self.uncertainty >= self.permit.expires_at.timestamp()
         ):
             self.stop()
-        return self.permit is not None
+        return self.permit is not None and not self.paused
 
     def authorize(self, sender, session_id, ownership_version, sequence, sent_at_ms):
         if not self.tick():
@@ -140,6 +153,8 @@ class ControlReceiver:
             raise AuthenticationError("Wrong sender, ownership or sequence")
         if type(sent_at_ms) not in (int, float) or not math.isfinite(sent_at_ms):
             raise AuthenticationError("Invalid command timestamp")
+        if sent_at_ms / 1000 < self.resumed_at:
+            raise AuthenticationError("Command predates explicit resume")
         age = self._wall_time() - sent_at_ms / 1000
         if age < -self.uncertainty or age + self.uncertainty > self.command_timeout:
             raise AuthenticationError("Command outside freshness bound")
