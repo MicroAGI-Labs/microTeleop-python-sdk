@@ -22,6 +22,7 @@ class ReceivedCommand:
     ownership_version: int
     received_at: float
     command: dict
+    control_revision: int = 0
 
 
 class RobotSession:
@@ -32,8 +33,12 @@ class RobotSession:
     Use ``current(sample)`` again after slow work and before submitting output.
     """
 
-    def __init__(self, *, safe_state, is_safe, **identity):
+    def __init__(self, *, safe_state, is_safe, command_boundary=None, **identity):
         self.latest = None
+        self._command_boundary = command_boundary
+        self._boundary = None
+        self._control_revision = 0
+        self._command_event = asyncio.Event()
         self.room = None
         self._tasks = []
         self._video = None
@@ -43,6 +48,7 @@ class RobotSession:
         self._stopping = False
 
         def stop():
+            self._control_revision += 1
             self.latest = None
             safe_state()
 
@@ -66,21 +72,47 @@ class RobotSession:
                 control["sequence"],
                 control["sent_at_ms"],
             )
+            boundary = self._command_boundary(command) if self._command_boundary else None
+            if boundary != self._boundary:
+                self._control_revision += 1
+                self._boundary = boundary
             self.latest = ReceivedCommand(
                 control["sequence"],
                 control["ownership_version"],
                 time.monotonic(),
                 command,
+                self._control_revision,
             )
+            self._command_event.set()
             return True
         except (AuthenticationError, ValueError, KeyError, TypeError, AttributeError):
             return False
 
+    async def wait_for_command(self, previous=None, *, timeout=None):
+        """Wake one control consumer on admitted input; retain only the newest pose."""
+        self._command_event.clear()
+        if self.latest is None or self.latest is previous:
+            try:
+                await asyncio.wait_for(self._command_event.wait(), timeout)
+            except asyncio.TimeoutError:
+                return None
+        return self.latest
+
     def current(self, sample):
+        """Keep fresh in-flight work across pose updates, never across control edges.
+
+        The optional command_boundary callback identifies robot-specific control
+        state. Without it, only the latest packet can authorize output.
+        """
         guard = self.client.guard
         return (
             sample is not None
-            and sample is self.latest
+            and self.latest is not None
+            and (
+                sample is self.latest
+                or (self._command_boundary is not None
+                    and sample.control_revision == self.latest.control_revision)
+            )
             and self.client.tick()
             and guard.permit is not None
             and guard.permit.ownership_version == sample.ownership_version

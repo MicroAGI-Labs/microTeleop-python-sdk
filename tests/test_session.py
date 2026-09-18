@@ -253,3 +253,44 @@ def test_pause_still_expires_authority_and_preserves_stop_fence(tmp_path):
     assert sdk.client.guard.permit is None
     sdk.client.process_state(dict(state, control_paused=False))
     assert not sdk.receive(packet()) and sdk.client.guard.fenced_version == 1
+
+
+def test_authorized_input_wakes_consumer_without_buffering_old_poses(tmp_path):
+    import asyncio
+
+    async def exercise():
+        sdk, _, _ = session(tmp_path)
+        waiter = asyncio.create_task(sdk.wait_for_command(timeout=0.5))
+        await asyncio.sleep(0)
+        assert not sdk.receive(packet(sender="viewer"))
+        assert not waiter.done()
+        assert sdk.receive(packet(1))
+        assert sdk.receive(packet(2))
+        latest = await waiter
+        assert latest is sdk.latest and latest.sequence == 2
+        assert await sdk.wait_for_command(latest, timeout=0.001) is None
+        assert await sdk.wait_for_command(timeout=0.001) is latest
+        sdk.client.guard.stop()
+        assert await sdk.wait_for_command(latest, timeout=0.001) is None
+
+    asyncio.run(exercise())
+
+
+def test_pose_updates_keep_inflight_work_but_control_edges_and_stop_fence_it(tmp_path):
+    sdk, _, _ = session(tmp_path)
+    sdk._command_boundary = lambda command: command["g1d"]["left"]
+    assert sdk.receive(packet(1))
+    first = sdk.latest
+    assert sdk.receive(packet(2))
+    assert sdk.current(first)
+    changed = packet(3)
+    payload = json.loads(changed.data)
+    payload["command"]["g1d"]["left"] = "released"
+    changed.data = json.dumps(payload).encode()
+    assert sdk.receive(changed)
+    assert not sdk.current(first)
+    assert sdk.receive(packet(4))
+    assert not sdk.current(first)  # A release/regrip cannot resurrect old motion.
+    latest = sdk.latest
+    sdk.client.guard.pause()
+    assert not sdk.current(latest)
