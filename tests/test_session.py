@@ -3,8 +3,50 @@ import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from microteleop_sdk import RobotSession
 from microteleop_sdk.control.crypto import SigningKey
-from microteleop_sdk.session import RobotSession
+
+HELLO = {
+    "protocol_version": 2,
+    "sdk_version": "0.3.0",
+    "sdk_sha": "a" * 40,
+    "capabilities": ["signed-control-v1", "view-health-v2", "camera-source-timestamp-v1"],
+    "profile_sha256": "b" * 64,
+}
+
+
+def health(sdk, token, **changes):
+    now = datetime.now(timezone.utc)
+    return (
+        dict(
+            robot_id="g1d",
+            site_id="munich",
+            sdk_instance_id=sdk.client.instance,
+            room_name="room",
+            session_id="session",
+            participant_identity="operator",
+            ownership_version=1,
+            permit=token,
+            expires_at=(now + timedelta(seconds=10)).isoformat(),
+            server_time=now.isoformat(),
+            permit_seconds=10,
+            profile_sha256=HELLO["profile_sha256"],
+            control_paused=False,
+            pause_reason=None,
+            required_views_fresh=True,
+            optional_view_warnings=[],
+            health_sequence=1,
+            health_expires_at=(now + timedelta(seconds=1)).isoformat(),
+            transport="livekit",
+            transport_status="accepted",
+            video={"provider": "livekit"},
+            operation="poll",
+            node_id="robot",
+            stop=False,
+            ready=True,
+        )
+        | changes
+    )
 
 
 def session(tmp_path):
@@ -14,6 +56,8 @@ def session(tmp_path):
     trusted.write_text(json.dumps({platform.key_id: platform.public_key}))
     stops = []
     value = RobotSession(
+        compatibility=HELLO,
+        contract_digest="c" * 64,
         platform_url="https://platform.test",
         robot_id="g1d",
         site_id="munich",
@@ -45,7 +89,7 @@ def session(tmp_path):
         },
         "control-permit",
     )
-    value.client.guard.accept_permit(token)
+    value.client.process_state(health(value, token))
     return value, stops, token
 
 
@@ -104,16 +148,26 @@ def test_stale_timestamp_cannot_refresh_latest_input(tmp_path):
     assert sdk.latest is None
 
 
+def test_simulator_command_gap_waits_for_measured_hold_and_fresh_input(tmp_path):
+    sdk, stops, token = session(tmp_path)
+    sdk.client.guard.recover_command_gaps = True
+    assert sdk.receive(packet())
+    sdk.client.guard.tick(monotonic_now=sdk.client.guard.command_deadline + 1)
+    assert sdk.latest is None and sdk.client.guard.paused and stops
+    assert sdk.client.guard.permit is not None
+    sdk.client.is_safe = lambda: False
+    sdk.client.process_state(health(sdk, token))
+    assert sdk.client.guard.paused and not sdk.receive(packet(2))
+    sdk.client.is_safe = lambda: True
+    sdk.client.process_state(health(sdk, token))
+    assert sdk.receive(packet(3))
+    assert sdk.current(sdk.latest)
+
+
 def test_platform_pause_clears_input_and_resume_preserves_ownership(tmp_path):
     sdk, stops, token = session(tmp_path)
     assert sdk.receive(packet())
-    state = {
-        "stop": False,
-        "ownership_version": 1,
-        "permit": token,
-        "ready": True,
-        "control_paused": True,
-    }
+    state = health(sdk, token, control_paused=True)
     sdk.client.process_state(state)
     assert sdk.latest is None and not sdk.receive(packet(2))
     assert not sdk.client.guard.tick(monotonic_now=sdk.client.guard.command_deadline + 1)
@@ -126,13 +180,7 @@ def test_platform_pause_clears_input_and_resume_preserves_ownership(tmp_path):
 
 def test_platform_resume_waits_for_measured_hold(tmp_path):
     sdk, _, token = session(tmp_path)
-    state = {
-        "stop": False,
-        "ownership_version": 1,
-        "permit": token,
-        "ready": True,
-        "control_paused": True,
-    }
+    state = health(sdk, token, control_paused=True)
     sdk.client.process_state(state)
     sdk.client.is_safe = lambda: False
     sdk.client.process_state(dict(state, control_paused=False))
@@ -155,25 +203,32 @@ def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch)
         def __init__(self, *_):
             pass
 
-        def capture_frame(self, frame, *, timestamp_us):
-            captured.append(timestamp_us)
+        def capture_frame(self, frame, *, timestamp_us, metadata):
+            captured.append((timestamp_us, metadata))
 
     async def publish(*_):
         pass
 
-    sdk.room = SimpleNamespace(local_participant=SimpleNamespace(publish_track=publish))
+    monkeypatch.setattr(
+        sdk, "room", SimpleNamespace(local_participant=SimpleNamespace(publish_track=publish))
+    )
     monkeypatch.setattr(rtc, "VideoSource", Source)
     monkeypatch.setattr(rtc.LocalVideoTrack, "create_video_track", lambda *_: object())
-    stamp = time.monotonic_ns() - 10_000_000
+    stamp = time.monotonic_ns() - 500_000_000
     rgb = np.zeros((8, 8, 3), np.uint8)
     asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
-    assert captured == [stamp // 1000]
+    assert captured[0][0] == stamp // 1000
+    assert captured[0][1].frame_id == 1
+    assert captured[0][1].user_timestamp == (sdk._capture_origin_ns + stamp) // 1000
+    clock = sdk.capture_clock()
+    assert clock["boot_id"] == sdk.client.instance
+    assert clock["ticks_us"] - captured[0][1].user_timestamp >= 500_000
     import pytest
 
     with pytest.raises(ValueError, match="capture"):
         asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
     with pytest.raises(ValueError, match="capture"):
-        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=time.monotonic_ns() - 200_000_000))
+        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=time.monotonic_ns() + 200_000_000))
     assert len(captured) == 1
 
 
@@ -182,13 +237,7 @@ def test_resume_cannot_reuse_inflight_or_queued_pre_pause_input(tmp_path):
     assert sdk.receive(packet())
     inflight = sdk.latest
     queued = packet(2)
-    state = {
-        "stop": False,
-        "ownership_version": 1,
-        "permit": token,
-        "ready": True,
-        "control_paused": True,
-    }
+    state = health(sdk, token, control_paused=True)
     sdk.client.process_state(state)
     sdk.client.process_state(dict(state, control_paused=False))
     assert not sdk.current(inflight)
@@ -198,15 +247,50 @@ def test_resume_cannot_reuse_inflight_or_queued_pre_pause_input(tmp_path):
 
 def test_pause_still_expires_authority_and_preserves_stop_fence(tmp_path):
     sdk, _, token = session(tmp_path)
-    state = {
-        "stop": False,
-        "ownership_version": 1,
-        "permit": token,
-        "ready": True,
-        "control_paused": True,
-    }
+    state = health(sdk, token, control_paused=True)
     sdk.client.process_state(state)
     sdk.client.guard.tick(monotonic_now=sdk.client.guard.deadline + 1)
     assert sdk.client.guard.permit is None
     sdk.client.process_state(dict(state, control_paused=False))
     assert not sdk.receive(packet()) and sdk.client.guard.fenced_version == 1
+
+
+def test_authorized_input_wakes_consumer_without_buffering_old_poses(tmp_path):
+    import asyncio
+
+    async def exercise():
+        sdk, _, _ = session(tmp_path)
+        waiter = asyncio.create_task(sdk.wait_for_command(timeout=0.5))
+        await asyncio.sleep(0)
+        assert not sdk.receive(packet(sender="viewer"))
+        assert not waiter.done()
+        assert sdk.receive(packet(1))
+        assert sdk.receive(packet(2))
+        latest = await waiter
+        assert latest is sdk.latest and latest.sequence == 2
+        assert await sdk.wait_for_command(latest, timeout=0.001) is None
+        assert await sdk.wait_for_command(timeout=0.001) is latest
+        sdk.client.guard.stop()
+        assert await sdk.wait_for_command(latest, timeout=0.001) is None
+
+    asyncio.run(exercise())
+
+
+def test_pose_updates_keep_inflight_work_but_control_edges_and_stop_fence_it(tmp_path):
+    sdk, _, _ = session(tmp_path)
+    sdk._command_boundary = lambda command: command["g1d"]["left"]
+    assert sdk.receive(packet(1))
+    first = sdk.latest
+    assert sdk.receive(packet(2))
+    assert sdk.current(first)
+    changed = packet(3)
+    payload = json.loads(changed.data)
+    payload["command"]["g1d"]["left"] = "released"
+    changed.data = json.dumps(payload).encode()
+    assert sdk.receive(changed)
+    assert not sdk.current(first)
+    assert sdk.receive(packet(4))
+    assert not sdk.current(first)  # A release/regrip cannot resurrect old motion.
+    latest = sdk.latest
+    sdk.client.guard.pause()
+    assert not sdk.current(latest)

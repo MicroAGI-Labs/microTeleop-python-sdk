@@ -1,3 +1,3 @@
-from microteleop_sdk.api import MicroTeleopAPI
+from microteleop_sdk.session import RobotSession
 
-__all__ = ["MicroTeleopAPI"]
+__all__ = ["RobotSession"]

@@ -53,6 +53,8 @@ class SigningKey:
             else serialization.load_pem_private_key
         )
         key = loader(data, password=None)
+        if not isinstance(key, Ed25519PrivateKey):
+            raise ValueError("expected Ed25519 private key")
         return cls(key)
 
     @classmethod
