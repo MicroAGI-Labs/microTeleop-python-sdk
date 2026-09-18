@@ -28,6 +28,7 @@ class ControlReceiver:
         max_permit_seconds,
         clock_uncertainty_seconds,
         command_timeout_seconds,
+        recover_command_gaps=False,
     ):
         if (
             not all(
@@ -55,6 +56,7 @@ class ControlReceiver:
         self.max_permit_seconds = max_permit_seconds
         self.uncertainty = clock_uncertainty_seconds
         self.command_timeout = command_timeout_seconds
+        self.recover_command_gaps = recover_command_gaps
         self.permit = None
         self.paused = False
         self.resumed_at = 0.0
@@ -131,10 +133,14 @@ class ControlReceiver:
         now = time.monotonic() if monotonic_now is None else monotonic_now
         if self.permit and (
             now >= self.deadline
-            or (not self.paused and now >= self.command_deadline)
             or self._wall_time() + self.uncertainty >= self.permit.expires_at.timestamp()
         ):
             self.stop()
+        if self.permit and not self.paused and now >= self.command_deadline:
+            if self.recover_command_gaps:
+                self.pause()
+            else:
+                self.stop()
         return self.permit is not None and not self.paused
 
     def authorize(self, sender, session_id, ownership_version, sequence, sent_at_ms):

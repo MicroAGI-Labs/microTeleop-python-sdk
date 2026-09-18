@@ -42,3 +42,8 @@ are separate qualification facts. This release does not advertise recording/uplo
 capabilities. Test with `uv run --python 3.12 --group dev pytest`.
 
 Video capture latency is advisory. `publish_rgb` preserves source timestamps and accepts advancing frames older than 100 ms; future or repeated timestamps are rejected. Camera freeze detection belongs to the robot integration and uses arrival of new source frames, independently of command freshness.
+
+Simulation adapters may explicitly set `recover_command_gaps=True`. A command
+timeout still invokes the safe-state callback and clears pending input. Recovery
+requires measured safe state, current platform authorization and fresh commands.
+The default remains authority revocation on timeout; physical adapters keep it.

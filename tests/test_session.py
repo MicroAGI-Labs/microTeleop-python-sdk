@@ -148,6 +148,22 @@ def test_stale_timestamp_cannot_refresh_latest_input(tmp_path):
     assert sdk.latest is None
 
 
+def test_simulator_command_gap_waits_for_measured_hold_and_fresh_input(tmp_path):
+    sdk, stops, token = session(tmp_path)
+    sdk.client.guard.recover_command_gaps = True
+    assert sdk.receive(packet())
+    sdk.client.guard.tick(monotonic_now=sdk.client.guard.command_deadline + 1)
+    assert sdk.latest is None and sdk.client.guard.paused and stops
+    assert sdk.client.guard.permit is not None
+    sdk.client.is_safe = lambda: False
+    sdk.client.process_state(health(sdk, token))
+    assert sdk.client.guard.paused and not sdk.receive(packet(2))
+    sdk.client.is_safe = lambda: True
+    sdk.client.process_state(health(sdk, token))
+    assert sdk.receive(packet(3))
+    assert sdk.current(sdk.latest)
+
+
 def test_platform_pause_clears_input_and_resume_preserves_ownership(tmp_path):
     sdk, stops, token = session(tmp_path)
     assert sdk.receive(packet())

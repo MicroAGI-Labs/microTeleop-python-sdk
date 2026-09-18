@@ -31,6 +31,7 @@ class RobotControlClient:
         command_timeout_seconds,
         compatibility,
         contract_digest,
+        recover_command_gaps=False,
         http=None,
     ):
         if urlparse(platform_url).scheme != "https":
@@ -63,6 +64,7 @@ class RobotControlClient:
             max_permit_seconds=max_permit_seconds,
             clock_uncertainty_seconds=clock_uncertainty_seconds,
             command_timeout_seconds=command_timeout_seconds,
+            recover_command_gaps=recover_command_gaps,
         )
         self.guard.stop()
 
