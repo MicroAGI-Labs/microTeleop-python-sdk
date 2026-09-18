@@ -198,7 +198,7 @@ def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch)
     )
     monkeypatch.setattr(rtc, "VideoSource", Source)
     monkeypatch.setattr(rtc.LocalVideoTrack, "create_video_track", lambda *_: object())
-    stamp = time.monotonic_ns() - 10_000_000
+    stamp = time.monotonic_ns() - 500_000_000
     rgb = np.zeros((8, 8, 3), np.uint8)
     asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
     assert captured[0][0] == stamp // 1000
@@ -206,13 +206,13 @@ def test_publish_retains_capture_clock_and_rejects_repeat(tmp_path, monkeypatch)
     assert captured[0][1].user_timestamp == (sdk._capture_origin_ns + stamp) // 1000
     clock = sdk.capture_clock()
     assert clock["boot_id"] == sdk.client.instance
-    assert 0 < clock["ticks_us"] - captured[0][1].user_timestamp < 100_000
+    assert clock["ticks_us"] - captured[0][1].user_timestamp >= 500_000
     import pytest
 
     with pytest.raises(ValueError, match="capture"):
         asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=stamp))
     with pytest.raises(ValueError, match="capture"):
-        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=time.monotonic_ns() - 200_000_000))
+        asyncio.run(sdk.publish_rgb(rgb, captured_at_ns=time.monotonic_ns() + 200_000_000))
     assert len(captured) == 1
 
 

@@ -40,3 +40,5 @@ is mandatory. Current platform permits use schema 1; admission hello uses protoc
 Recording/upload, live Quest/LiveKit trials, Genesis dynamics and hardware acceptance
 are separate qualification facts. This release does not advertise recording/upload
 capabilities. Test with `uv run --python 3.12 --group dev pytest`.
+
+Video capture latency is advisory. `publish_rgb` preserves source timestamps and accepts advancing frames older than 100 ms; future or repeated timestamps are rejected. Camera freeze detection belongs to the robot integration and uses arrival of new source frames, independently of command freshness.

@@ -146,9 +146,9 @@ class RobotSession:
         if (
             type(captured_at_ns) is not int
             or captured_at_ns <= self._last_capture_ns
-            or not 0 <= time.monotonic_ns() - captured_at_ns < 100_000_000
+            or captured_at_ns > time.monotonic_ns()
         ):
-            raise ValueError("stale, future or repeated camera capture")
+            raise ValueError("future or repeated camera capture")
         height, width = rgb.shape[:2]
         if self._video is None:
             source = rtc.VideoSource(width, height)
@@ -167,8 +167,6 @@ class RobotSession:
         source, expected_width, expected_height, expected_name = self._video
         if (width, height, name) != (expected_width, expected_height, expected_name):
             raise ValueError("camera geometry/name changed during session")
-        if not 0 <= time.monotonic_ns() - captured_at_ns < 100_000_000:
-            raise ValueError("camera capture expired during track publication")
         self._frame_id += 1
         source.capture_frame(
             rtc.VideoFrame(
